@@ -1,0 +1,1564 @@
+JavaScript
+
+LED
+var MAX_LIGHT_PERCENT = 1;
+var VOLUME_AT_RATE = 100000;
+var input;
+var value;
+
+function setup() {
+	setComponentOpacity("black", 1);
+	attachInterrupt(0, isr);
+	isr();
+}
+
+function isr() {
+	input = analogRead(0);
+	value = map(input, 0, 1023, 0, 1);
+	
+	setComponentOpacity("black", 1-value);
+	setDeviceProperty(getName(), "level",input);
+}
+
+var lastTimeInSeconds = 0;
+function loop()
+{
+	updateEnvironment();
+	
+	delay(1000);
+}
+
+function updateEnvironment()
+{
+	var rate = value*MAX_LIGHT_PERCENT*VOLUME_AT_RATE / Environment.getVolume();
+	// rate equals limit because we want it to happen immediately
+	Environment.setContribution("Visible Light", rate, rate, false);
+}
+
+
+
+LAWN SPRINKLER
+var WATERLEVEL_RATE = 0.1;	// 0.1 cm per second
+var HUMIDITY_RATE = 5/3600; // 5% per hour
+var VOLUME_AT_RATE = 100000;
+
+var state = 0;	// 0 off, 1 on
+
+function setup() {
+	
+	IoEClient.setup({
+		type: "Lawn Sprinkler",
+		states: [
+		{
+			name: "Status",
+			type: "bool",
+			controllable: true
+		}			
+		]
+	});
+	
+	IoEClient.onInputReceive = function(input) {
+		processData(input, true);
+	};
+	
+	attachInterrupt(0, function() {
+		processData(customRead(0), false);
+	});
+	
+	state = restoreProperty("state", 0);
+	setState(state);
+}
+
+function restoreProperty(propertyName, defaultValue)
+{
+	var value = getDeviceProperty(getName(), propertyName);
+	if ( !(value === "" || value == "undefined") ){
+		if ( typeof(defaultValue) == "number" )
+			value = Number(value);
+		
+		setDeviceProperty(getName(), propertyName, value);
+		return value;
+	}
+	
+	return defaultValue;
+}
+
+function mouseEvent(pressed, x, y, firstPress) {
+	if (firstPress)
+		setState(state ? 0 : 1);
+}
+
+function processData(data, bIsRemote) {
+	if ( data.length <= 0  )
+		return;
+	setState(parseInt(data));
+}
+
+function setState(newState)
+{
+	state = newState;
+	
+	digitalWrite(5, state);
+	customWrite(0, state);
+	IoEClient.reportStates(state);
+	setDeviceProperty(getName(), "state", state);
+	updateEnvironment();
+}
+
+
+function updateEnvironment()
+{
+	if ( state == 1){
+		var volumeRatio = VOLUME_AT_RATE / Environment.getVolume();
+		Environment.setContribution("Water Level", WATERLEVEL_RATE*volumeRatio);
+		Environment.setContribution("Humidity", HUMIDITY_RATE*volumeRatio);
+	}
+	else
+	{
+		Environment.setContribution("Water Level", 0);
+		Environment.setContribution("Humidity", 0);
+	}
+}
+
+
+SMOKE SENSOR
+
+var ENVIRONMENT_NAME = "Smoke";
+var MIN = 0;
+var MAX = 100;
+var value = 0;
+
+function setup()
+{
+}
+
+function loop() 
+{
+	value = parseFloat(Environment.get(ENVIRONMENT_NAME));
+	//Serial.println(value);
+	if (value < MIN)
+		value = MIN;
+	else if (value > MAX)
+		value = MAX;
+	setDeviceProperty(getName(), "level", value);
+	value = Math.floor(map(value, MIN, MAX, 0, 255));
+	analogWrite(A0, value);
+	delay(1000);
+}
+
+WIND SENSOR
+var ENVIRONMENT_NAME = "Wind Speed";
+var value;
+
+function loop() {
+	
+	value = Environment.get(ENVIRONMENT_NAME);
+	if (value >=1)
+		digitalWrite(0, HIGH);
+	else
+		digitalWrite(0, LOW);
+	delay(1000);
+}
+
+HUMITURE SENSOR
+// Purpose:
+// Humiture sensor.  Check environmental values to determine the humiture.
+
+// Environment must have these two variables in order for this object to work.
+// The tempurature must be in degrees fahrenheit.
+var TEMPERATURE_NAME = "Ambient Temperature";
+var HUMIDITY_NAME = 'Humidity';
+var MIN = 0;
+var MAX = 100;
+
+// How temperatures are represented in the Environment.
+// If you are storing temperature as C then this would be true.
+// If as F then false.  This way the script knows how to convert it when reading from the environment.
+var METRIC = true;
+
+function setup() {
+}
+
+// Purpose:
+// Update function.  Occures once each update.  Limits how over the temerature is detected to speed up the operation.
+function loop() {
+	detect();
+	delay(1000);
+}
+
+// Detects when how temperature is stored in then environment is changed.
+// Updates the display and handles the correct measurement type (F or C)
+function measurementSystemChangeEvent() {
+	METRIC = isUsingMetric();
+	detect();
+}
+
+// Purpose:
+// Check the environmental value and calculate and display the humiture.
+function detect() {
+	var temperature = Environment.get(TEMPERATURE_NAME);
+	var humidity = Environment.get(HUMIDITY_NAME);
+	if(0 > humidity)
+		humidity = 0;
+
+	if(METRIC)
+		temperature = (temperature * 1.8) + 32;	
+
+	updateHumiture(temperature,  humidity);
+}
+
+
+// Purpose:
+// Compute the humature and update the text display.
+function updateHumiture(temperature, humidity) {
+	var result = (temperature + humidity)/2;
+	if (result < MIN)
+		result = MIN;
+	else if (result > MAX)
+		result = MAX;
+	setDeviceProperty(getName(), "level", Math.floor(result + .5));
+	result = Math.floor(map(result, MIN, MAX, 0, 255));
+	analogWrite(A0, result);
+}
+
+WATER SENSOR
+var ENVIRONMENT_NAME = "Water Level";
+var MIN = 0;
+var MAX = 20;
+var value;
+
+function loop() {
+	
+	value = Environment.get(ENVIRONMENT_NAME);
+
+	if (value < MIN)
+		value = MIN;
+	else if (value > MAX)
+		value = MAX;
+	
+	setDeviceProperty(getName(), "level", value);
+	value = map(value, MIN, MAX, 0, 255);
+	analogWrite(A0, value);
+	delay(1000);
+}
+
+DOOR
+
+var ENVIRONMENTS = ["Argon", "CO", "CO2", "Hydrogen", "Helium", "Methane", "Nitrogen", "O2", "Ozone", "Propane", "Smoke"];
+var ENVIRONMENT_MAX_IMPACT = -0.02; // 2% max when door opens
+var TEMPERATURE_TRANSFERENCE_MULTIPLIER = 1.25; // increase speed 25% when door open
+var HUMIDITY_TRANSFERENCE_MULTIPLIER = 1.25;
+var GASES_TRANSFERENCE_MULTIPLIER = 2;
+
+var doorState = 0;	// 0 is closed, 1 is opened
+var lockState = 0;  // 0 is unlocked, 1 is locked
+
+function setup () {
+	IoEClient.setup({
+		type: "Door",
+		states: [{
+			name: "Open",
+			type: "bool"
+		}, {
+			name: "Lock",
+			type: "options",
+			options: {
+				"0": "Unlock",
+				"1": "Lock"
+			},
+			controllable: true
+		}]
+	});
+	
+	IoEClient.onInputReceive = function (input) {
+		processData(input, true);
+	};
+	
+	attachInterrupt(0, function () {
+		processData(customRead(0), false);
+	});
+	
+	setDoorState(doorState);
+	setLockState(lockState);
+}
+
+function mouseEvent (pressed, x, y, firstPress) {
+	if (firstPress) {
+		if ( isPointInRectangle(x, y, 10,40,5,10) )
+		{
+			if ( lockState === 0 ) {
+				setLockState(1);
+            } else {
+				setLockState(0);
+            }
+		} else {
+			if ( doorState === 0 ) {
+				openDoor();
+            } else {
+				closeDoor();
+            }
+		}		
+	}
+}
+
+function loop () {
+	
+}
+
+function processData (data, bIsRemote) {
+	if ( data.length <= 0  ) {
+		return;
+    }
+	Serial.println(data);
+	
+	data = data.split(",");
+	var doorStateData = parseInt(data[0]);
+	var lockStateData = parseInt(data[1]);
+	if ( lockStateData > -1 ) {
+		setLockState(lockStateData);
+    }
+	
+	if ( doorStateData > -1 && !bIsRemote ) {
+		if ( doorStateData === 0 ) { 
+			closeDoor();
+        } else {
+			openDoor();
+        }
+	}
+}
+function sendReport () {
+	var report = doorState+","+lockState;	// comma seperated states
+	customWrite(0, report);
+
+	IoEClient.reportStates(report);
+	setDeviceProperty(getName(), "door state", doorState);
+	setDeviceProperty(getName(), "lock state", lockState);
+}
+
+function closeDoor () {
+	setDoorState(0);
+	updateEnvironment();
+}
+
+function openDoor () {
+	if ( lockState===0 ) {
+		setDoorState(1);
+		updateEnvironment();
+	} else {
+		Serial.println("can't open locked door");
+	}
+	
+	
+}
+
+function setDoorState (state) {
+	if ( state === 0) {
+		digitalWrite(1, LOW);
+		setComponentOpacity("led", 1);	// show the led
+	} else {
+		digitalWrite(1, HIGH);
+		setComponentOpacity("led", 0);	// hide the led
+	}
+	doorState = state;
+	sendReport();
+}
+
+function setLockState (state) {
+	if ( state === 0 ) {
+		digitalWrite(2, LOW);
+    } else {
+		digitalWrite(2, HIGH);
+    }
+	
+	lockState = state;
+	sendReport();
+}
+
+
+function updateEnvironment () {
+	var rate,max;
+	if ( doorState == 1) {
+		for (var i=0; i<ENVIRONMENTS.length; i++) {
+			max = Environment.get(ENVIRONMENTS[i]) * ENVIRONMENT_MAX_IMPACT;
+			// the max is reached in an hour, so we divide by 3600 to get seconds
+			// then this rate is also based on 100,000 cubic meters (approx. coporate office size)
+			rate = max / 3600 * 100000 / Environment.getVolume();
+			Environment.setContribution(ENVIRONMENTS[i], rate, max);
+			Environment.setTransferenceMultiplier(ENVIRONMENTS[i], GASES_TRANSFERENCE_MULTIPLIER);
+		}
+		
+		Environment.setTransferenceMultiplier("Ambient Temperature", TEMPERATURE_TRANSFERENCE_MULTIPLIER);
+		Environment.setTransferenceMultiplier("Humidity", HUMIDITY_TRANSFERENCE_MULTIPLIER);
+	} else {
+		for (var i=0; i<ENVIRONMENTS.length; i++) {
+			Environment.setContribution(ENVIRONMENTS[i], 0, 0);
+			Environment.removeCumulativeContribution(ENVIRONMENTS[i]);
+			Environment.setTransferenceMultiplier(ENVIRONMENTS[i], 1);
+		}
+		Environment.setTransferenceMultiplier("Ambient Temperature", 1);
+		Environment.setTransferenceMultiplier("Humidity", 1);
+	}
+}
+
+function isPointInRectangle (x,y, rx, ry, width, height) {
+	if (width <= 0 || height <= 0) {
+		return false;
+	}
+ 
+	return (x >= rx && x <= rx + width && y >= ry && y <= ry + height);
+}
+
+WINDOW
+var ENVIRONMENTS = ["Argon", "CO", "CO2", "Hydrogen", "Helium", "Methane", "Nitrogen", "O2", "Ozone", "Propane", "Smoke"];
+var ENVIRONMENT_MAX_IMPACT = -0.01; // 2% max when door opens
+var TEMPERATURE_TRANSFERENCE_MULTIPLIER = 1.20; // increase speed 25% when door open
+var HUMIDITY_TRANSFERENCE_MULTIPLIER = 1.20;
+var GASES_TRANSFERENCE_MULTIPLIER = 2;
+
+var state = 0;
+
+//set up client to talk and listen to IoE registration server
+function setup() {
+	IoEClient.setup({
+		type: "Window",
+		states: [{
+			name: "On",
+			type: "bool",
+			controllable: true
+		}]
+	});
+	
+	IoEClient.onInputReceive = function(input) {
+		processData(input, true);
+	};
+	
+	attachInterrupt(0, function() {
+		processData(customRead(0), false);
+	});
+	
+	state = restoreProperty("state", 0);
+	setState(state);
+}
+
+function restoreProperty(propertyName, defaultValue)
+{
+	var value = getDeviceProperty(getName(), propertyName);
+	if ( !(value === "" || value == "undefined") ){
+		if ( typeof(defaultValue) == "number" )
+			value = Number(value);
+		
+		setDeviceProperty(getName(), propertyName, value);
+		return value;
+	}
+	
+	return defaultValue;
+}
+
+function mouseEvent(pressed, x, y, firstPress) {
+	if (firstPress)
+		setState(state ? 0 : 1);
+}
+
+//update carbon dioxide and carbon monoxide and send new data to registration server
+function loop() {
+	updateEnvironment();	
+	delay(1000);
+}
+
+//process data received from server
+function processData(data, bIsRemote)
+{
+	if ( data.length <= 0  )
+		return;
+	data = data.split(",");
+	setState(parseInt(data[0]));
+}
+
+//set state and update component image to reflect the current state
+function setState(newState)
+{
+	if ( newState === 0 )
+		digitalWrite(1, LOW);
+	else{
+		digitalWrite(1, HIGH);
+	}
+	state = newState;
+	customWrite(0, state);
+	IoEClient.reportStates(state);
+	setDeviceProperty(getName(), "state", state);
+}
+
+function updateEnvironment()
+{
+	var rate,max;
+	if ( state == 1)
+	{
+		for(var i=0; i<ENVIRONMENTS.length; i++){
+			max = Environment.get(ENVIRONMENTS[i]) * ENVIRONMENT_MAX_IMPACT;
+			// the max is reached in an hour, so we divide by 3600 to get seconds
+			// then this rate is also based on 100,000 cubic meters (approx. coporate office size)
+			rate = max / 3600 * 100000 / Environment.getVolume();
+			Environment.setContribution(ENVIRONMENTS[i], rate, max);
+			Environment.setTransferenceMultiplier(ENVIRONMENTS[i], GASES_TRANSFERENCE_MULTIPLIER);
+
+		}
+		
+		Environment.setTransferenceMultiplier("Ambient Temperature", TEMPERATURE_TRANSFERENCE_MULTIPLIER);
+		Environment.setTransferenceMultiplier("Humidity", HUMIDITY_TRANSFERENCE_MULTIPLIER);
+	}
+	else
+	{
+		for(var j=0; j<ENVIRONMENTS.length; j++){
+			Environment.setContribution(ENVIRONMENTS[j], 0, 0);
+			Environment.removeCumulativeContribution(ENVIRONMENTS[j]);
+			Environment.setTransferenceMultiplier(ENVIRONMENTS[j], 1);
+		}
+		Environment.setTransferenceMultiplier("Ambient Temperature", 1);
+		Environment.setTransferenceMultiplier("Humidity", 1);
+		
+	}
+}
+
+WATER LEVEL MONITOR
+var ENVIRONMENT_NAME = "Water Level";	//global environment variable to hold the water level
+var METRIC = true; //use cm when set to true and inch when set to false
+var level = 0; //level of water measured in either inch or cm
+
+//set up metric, initialize state and client to talk to IoE registration server
+function setup() {
+	
+	var unit = "in";
+	
+	if ( METRIC )
+		unit = "cm";
+		
+	IoEClient.setup({
+		type: "Water Level Monitor",
+		states: [
+		{
+			name: "Water Level",
+			type: "number",
+			"unit": "cm",
+            "imperialUnit": "in",
+            "toImperialConversion": "x/2.54",
+            "toMetricConversion": "x*2.54",
+            "decimalDigits": 1,
+			controllable: false
+		}]
+	});
+	
+	setState(level);
+	setCustomText(35,20,200,20, level.toFixed(2) );
+	sendReport();
+}
+
+//continuosly detecting water level and send report to server
+function loop() {
+	detect();
+	sendReport();
+	delay(1000);
+}
+
+//get WATER_LEVEL measurement defined in Environment
+function detect()
+{
+	var value = Environment.get(ENVIRONMENT_NAME);
+	setLevel(value.toFixed(2));
+}
+
+//send water level in desired metric to the server
+function sendReport()
+{
+	var report = level;	// comma seperated states
+	IoEClient.reportStates(report);
+	setDeviceProperty(getName(), "level", report);
+}
+
+//set state and update component image to reflect the current state
+function setState()
+{
+	if ( level > 0 )
+		digitalWrite(1, HIGH);
+	else
+		digitalWrite(1, LOW);
+	
+	sendReport();
+}
+
+//set water level
+function setLevel(newLevel)
+{
+	if  (level == newLevel)
+		return;
+		
+	level = newLevel;
+	var convertedLevel = convertLength(level);
+	setCustomText(35,20,200,20, convertedLevel);
+	setState();
+}
+
+
+function convertLength(value) {
+	if (isUsingMetric())
+		return value;
+	else
+		return value / 2.54;
+}
+
+
+SOLAR PANEL IOT4
+//Solar Panel
+//Read the sunlight levels
+//Output electricity based on sunlight
+//Panel will be 160Watts per square meter
+
+//Features output to IoE Server:
+// number of kWh of energy produced since turning on
+// number of kWh per minute
+// current production
+var ENVIRONMENT_NAME = "Sunlight";
+var MULTIPLIER = 255/1023;
+var MAX_POWER = 1000;//1000 Watts of power based on one meter solar panel at noon at the equator
+var EFFICIENCY = 0.16;//About a 16 percent efficiency per solar panel
+var PANEL_POWER = MAX_POWER * EFFICIENCY;
+var LOG_BASE = 1.0749111034571373359815489867558;
+
+var state = 1;
+var electricity = 0;
+//var tick = 0;
+
+function setup(){
+	
+	IoEClient.setup({
+		type: "Solar",
+		states: [
+			{
+			name: "Status",
+			type: "number",
+			unit: 'Wh',
+			controllable: false
+			}
+	 ]
+	 });
+	 
+	 IoEClient.onInputReceive = function(input) {
+		// Serial.println("input: " + input);
+	 	processData(input, true);
+	 };
+	
+	
+	sendReport();
+
+}
+
+function loop(){
+//	if ( (tick++ % 10) === 0 )	// is tick consistent across devices? 
+//	{
+		electricity = Math.round(getElectricityProduction());
+		//Serial.println(electricity);
+		displayElectricity();
+		sendReport();
+		outputElectricity();
+		delay(1000);
+//	}
+}
+
+function displayElectricity(){
+	setCustomText(70, 45, 1000, 1000, String(parseInt(electricity)) + '\tW');
+}
+
+function getElectricityProduction(){
+	return PANEL_POWER * Environment.get(ENVIRONMENT_NAME) / 100;
+}
+
+function sendReport()
+{
+	var report = state;	// comma seperated states
+	IoEClient.reportStates(electricity);
+	setDeviceProperty(getName(), "level", electricity);
+}
+
+function outputElectricity(){
+	var el_log = Math.floor(Math.log(electricity)/Math.log(LOG_BASE));
+	if(el_log < 0)
+		el_log = 0;
+	else if (el_log > 255)
+		el_log = 255;
+//	Serial.println(el_log);
+	analogWrite(0, el_log);
+}
+
+SOLAR PANEL IOT9
+//Solar Panel
+//Read the sunlight levels
+//Output electricity based on sunlight
+//Panel will be 160Watts per square meter
+
+//Features output to IoE Server:
+// number of kWh of energy produced since turning on
+// number of kWh per minute
+// current production
+var ENVIRONMENT_NAME = "Sunlight";
+var MULTIPLIER = 255/1023;
+var MAX_POWER = 1000;//1000 Watts of power based on one meter solar panel at noon at the equator
+var EFFICIENCY = 0.16;//About a 16 percent efficiency per solar panel
+var PANEL_POWER = MAX_POWER * EFFICIENCY;
+var LOG_BASE = 1.0749111034571373359815489867558;
+
+var state = 1;
+var electricity = 0;
+//var tick = 0;
+
+function setup(){
+	
+	IoEClient.setup({
+		type: "Solar",
+		states: [
+			{
+			name: "Status",
+			type: "number",
+			unit: 'Wh',
+			controllable: false
+			}
+	 ]
+	 });
+	 
+	 IoEClient.onInputReceive = function(input) {
+		// Serial.println("input: " + input);
+	 	processData(input, true);
+	 };
+	
+	
+	sendReport();
+
+}
+
+function loop(){
+//	if ( (tick++ % 10) === 0 )	// is tick consistent across devices? 
+//	{
+		electricity = Math.round(getElectricityProduction());
+		//Serial.println(electricity);
+		displayElectricity();
+		sendReport();
+		outputElectricity();
+		delay(1000);
+//	}
+}
+
+function displayElectricity(){
+	setCustomText(70, 45, 1000, 1000, String(parseInt(electricity)) + '\tW');
+}
+
+function getElectricityProduction(){
+	return PANEL_POWER * Environment.get(ENVIRONMENT_NAME) / 100;
+}
+
+function sendReport()
+{
+	var report = state;	// comma seperated states
+	IoEClient.reportStates(electricity);
+	setDeviceProperty(getName(), "level", electricity);
+}
+
+function outputElectricity(){
+	var el_log = Math.floor(Math.log(electricity)/Math.log(LOG_BASE));
+	if(el_log < 0)
+		el_log = 0;
+	else if (el_log > 255)
+		el_log = 255;
+//	Serial.println(el_log);
+	analogWrite(0, el_log);
+}
+
+CARBON MONOXIDE DETECTOR
+var ALARM_LEVEL = 20;
+var ENVIRONMENT_NAME = "CO";
+
+var state = 0;
+var level = 0;
+
+function setup() {
+	
+	IoEClient.setup({
+		type: "Carbon Monoxide Detector",
+		states: [{
+			name: "Alarm",
+			type: "bool",
+			controllable: false
+		},
+		{
+			name: "Level",
+			type: "number",
+			controllable: false
+		}]
+	});
+	
+	state = restoreProperty("state", 0);
+	setState(state);
+	sendReport();
+}
+
+function restoreProperty(propertyName, defaultValue)
+{
+	var value = getDeviceProperty(getName(), propertyName);
+	if ( !(value === "" || value == "undefined") ){
+		if ( typeof(defaultValue) == "number" )
+			value = Number(value);
+		
+		setDeviceProperty(getName(), propertyName, value);
+		return value;
+	}
+	
+	return defaultValue;
+}
+
+
+function loop() {
+	detect();
+	delay(1000);
+}
+
+function detect()
+{
+	var value = Environment.get(ENVIRONMENT_NAME);
+	if (value >= 0 )
+		setLevel( Environment.get(ENVIRONMENT_NAME));
+}
+
+function sendReport()
+{
+	var report = state +","+level;	// comma seperated states
+	IoEClient.reportStates(report);
+	setDeviceProperty(getName(), "state", state);
+	setDeviceProperty(getName(), "level", level);
+}
+
+function setState(newState)
+{
+	if ( newState === 0 )
+		digitalWrite(1, LOW);
+	else
+		digitalWrite(1, HIGH);
+	
+	state = newState;
+	
+	sendReport();
+}
+
+function setLevel(newLevel)
+{
+	if  (level == newLevel)
+		return;
+		
+	level = newLevel;
+	if ( level > ALARM_LEVEL)
+		setState(1);
+	else
+		setState(0);
+	
+	sendReport();
+	
+}
+
+WIND DETECTOR
+var ENVIRONMENT_NAME = "Wind Speed";
+var state = 0;
+var level = 0;
+var tick = 0;
+
+//set up client to talk and listen to IoE registration server
+function setup() {
+	IoEClient.setup({
+		type: "Wind Detector",
+		states: [{
+			name: "Wind",
+			type: "bool",
+			controllable: false
+		}]
+	});
+	
+	IoEClient.onInputReceive = function(input) {
+		processData(input, true);
+	};
+	
+	setState(state);
+	sendReport();
+
+}
+
+//continously checking if WIND exist and send report to registration server
+function loop() {
+
+	if ( (tick++ % 10) === 0 )	// is tick consistent across devices? 
+	{
+		detect();
+		sendReport();
+	}
+}
+
+//get WIND variable defined in Environment
+function detect()
+{
+	var value = Environment.get(ENVIRONMENT_NAME);
+
+	if (value >= 1 )
+		setState(1);
+	else
+		setState(0);
+}
+
+//process data received from server
+//not being called since controllable set to false in client setup
+function processData(data, bIsRemote)
+{
+	if ( data.length <= 0  )
+		return;
+	data = data.split(",");
+	setState(parseInt(data[0]));
+}
+
+//send wind state  to the server
+function sendReport()
+{
+	var report = state;	// comma seperated states
+	IoEClient.reportStates(report);
+}
+
+//set state and update component image to reflect the current state
+function setState(newState)
+{
+	if ( newState === 0 ){
+		digitalWrite(1, LOW);
+	}
+	else{
+		digitalWrite(1, HIGH);
+	}
+	
+	state = newState;
+	
+	sendReport();
+}
+
+//toggle wind state
+function toggleState()
+{
+	if ( state === 0)
+		setState(1);
+	else
+		setState(0);
+}
+
+BLUETOOTH SPEAKER
+var dstService = "{58c41a2f-5111-45b0-863c-0429591c81fd}";
+var btService = new BluetoothService();
+var state = 0;
+var active = 0;
+
+function setup() {
+	IoEClient.setup({
+		type: "Bluetooth Speaker",
+		states: [{
+			name: "Connected",
+			type: "bool",
+			controllable: false
+		},
+		{
+			name: "Playing",
+			type: "bool",
+			controllable: false
+		}]
+	});
+	
+	state = restoreProperty("state", 0);
+	active = restoreProperty("active", 0);
+	
+	destroySounds();
+	Bluetooth.init();
+	Bluetooth.setAcceptingPairRequest(true);
+	Bluetooth.setDiscoverable(true);
+	Serial.println(btService.start(dstService));
+}
+
+function restoreProperty(propertyName, defaultValue)
+{
+	var value = getDeviceProperty(getName(), propertyName);
+	if ( !(value === "" || value == "undefined") ){
+		if ( typeof(defaultValue) == "number" )
+			value = Number(value);
+		
+		setDeviceProperty(getName(), propertyName, value);
+		return value;
+	}
+	
+	return defaultValue;
+}
+
+function loop() {
+	updateState();
+	delay(1000);	
+}
+
+function updateState() {
+	if (active)
+		digitalWrite(1, HIGH);
+	else
+		digitalWrite(1, LOW);
+	
+	var report = state + "," + active;
+	IoEClient.reportStates(report);
+	setDeviceProperty(getName(), "state", state);
+	setDeviceProperty(getName(), "active", active);
+}
+
+function playMusic(sound) {
+	destroySounds();
+	addSound("music", sound);
+	playSound("music", -1);
+	active = 1;
+	digitalWrite(1, HIGH);
+}
+
+function stopMusic() {
+	destroySounds();
+	active = 0;
+	digitalWrite(1, LOW);
+}
+
+Bluetooth.onPairRequest = function(mac, deviceName) {
+	Serial.println("accepting pair request: " + mac);
+	Bluetooth.acceptPairRequest(mac, deviceName);
+};
+
+Bluetooth.onDevicePair = function(mac) {
+	Serial.println("paired: " + mac);
+	state = 1;
+};
+
+Bluetooth.onDeviceUnpair = function(mac) {
+	Serial.println("unpaired: " + mac);
+	stopMusic();
+	state = 0;
+};
+
+Bluetooth.onDeviceConnect = function(mac) {
+	Serial.println("connected: " + mac);
+	state = 1;
+};
+
+Bluetooth.onDeviceDisconnect = function(mac) {
+	Serial.println("disconnected: " + mac);
+	stopMusic();
+	state = 0;
+};
+
+btService.onReceive = function(srcMac, srcService, dstMac, dstService, data) {
+	Serial.println("received from " + srcMac + ":" + srcService + ": " + data);
+	if (data.length)
+		playMusic(data);
+	else
+		stopMusic();
+};
+
+LIGHT IOT23
+var ENVIRONMENT_IMPACT_DIM = 10;
+var VOLUME_AT_RATE = 100000;
+
+var state = 0;	// 0 off, 1 low, 2 high
+var lastTimeInSeconds = 0;
+
+function setup() {
+
+	IoEClient.setup({
+		type: "Light",
+		states: [
+		{
+			name: "Status",
+			type: "options",
+			options: {
+				"0": "Off",
+				"1": "Dim",
+				"2": "On"
+			},
+			controllable: true
+		}			
+		]
+	});
+	
+	IoEClient.onInputReceive = function(input) {
+		processData(input, true);
+	};
+	
+	attachInterrupt(0, function() {
+		processData(customRead(0), false);
+	});
+
+	state = restoreProperty("state", 0);
+	setState(state);
+}
+
+function restoreProperty(propertyName, defaultValue)
+{
+	var value = getDeviceProperty(getName(), propertyName);
+	if ( !(value === "" || value == "undefined") ){
+		if ( typeof(defaultValue) == "number" )
+			value = Number(value);
+		
+		setDeviceProperty(getName(), propertyName, value);
+		return value;
+	}
+	
+	return defaultValue;
+}
+
+function mouseEvent(pressed, x, y, firstPress) {
+	if (firstPress)
+		setState(state+1);
+}
+
+function loop() {
+	updateEnvironment();
+
+	delay(1000);
+}
+
+function processData(data, bIsRemote) {
+	if ( data.length <= 0  )
+		return;
+	setState(parseInt(data));
+}
+
+function setState(newState) {
+	if (newState >= 3)
+		newState = 0;
+	state = newState;
+	
+	analogWrite(A1, state);
+	customWrite(0, state);
+	IoEClient.reportStates(state);
+	setDeviceProperty(getName(), "state", state);
+}
+
+function updateEnvironment()
+{
+	var volumeRatio = VOLUME_AT_RATE / Environment.getVolume();
+	if ( state === 0 )
+		Environment.setContribution("Visible Light", 0,0);
+	else if ( state === 1)
+		Environment.setContribution("Visible Light", ENVIRONMENT_IMPACT_DIM*volumeRatio, ENVIRONMENT_IMPACT_DIM*volumeRatio, false);
+	else if ( state === 2 )
+		Environment.setContribution("Visible Light", ENVIRONMENT_IMPACT_DIM*2*volumeRatio, ENVIRONMENT_IMPACT_DIM*2*volumeRatio, false);
+}
+
+
+LIGHT IOT24
+var ENVIRONMENT_IMPACT_DIM = 10;
+var VOLUME_AT_RATE = 100000;
+
+var state = 0;	// 0 off, 1 low, 2 high
+var lastTimeInSeconds = 0;
+
+function setup() {
+
+	IoEClient.setup({
+		type: "Light",
+		states: [
+		{
+			name: "Status",
+			type: "options",
+			options: {
+				"0": "Off",
+				"1": "Dim",
+				"2": "On"
+			},
+			controllable: true
+		}			
+		]
+	});
+	
+	IoEClient.onInputReceive = function(input) {
+		processData(input, true);
+	};
+	
+	attachInterrupt(0, function() {
+		processData(customRead(0), false);
+	});
+
+	state = restoreProperty("state", 0);
+	setState(state);
+}
+
+function restoreProperty(propertyName, defaultValue)
+{
+	var value = getDeviceProperty(getName(), propertyName);
+	if ( !(value === "" || value == "undefined") ){
+		if ( typeof(defaultValue) == "number" )
+			value = Number(value);
+		
+		setDeviceProperty(getName(), propertyName, value);
+		return value;
+	}
+	
+	return defaultValue;
+}
+
+function mouseEvent(pressed, x, y, firstPress) {
+	if (firstPress)
+		setState(state+1);
+}
+
+function loop() {
+	updateEnvironment();
+
+	delay(1000);
+}
+
+function processData(data, bIsRemote) {
+	if ( data.length <= 0  )
+		return;
+	setState(parseInt(data));
+}
+
+function setState(newState) {
+	if (newState >= 3)
+		newState = 0;
+	state = newState;
+	
+	analogWrite(A1, state);
+	customWrite(0, state);
+	IoEClient.reportStates(state);
+	setDeviceProperty(getName(), "state", state);
+}
+
+function updateEnvironment()
+{
+	var volumeRatio = VOLUME_AT_RATE / Environment.getVolume();
+	if ( state === 0 )
+		Environment.setContribution("Visible Light", 0,0);
+	else if ( state === 1)
+		Environment.setContribution("Visible Light", ENVIRONMENT_IMPACT_DIM*volumeRatio, ENVIRONMENT_IMPACT_DIM*volumeRatio, false);
+	else if ( state === 2 )
+		Environment.setContribution("Visible Light", ENVIRONMENT_IMPACT_DIM*2*volumeRatio, ENVIRONMENT_IMPACT_DIM*2*volumeRatio, false);
+}
+
+HOME SPEAKER
+var VOLUME_AT_RATE = 100000;
+var SOUND_VOLUME = 65;
+var SOUND_PITCH = 20;
+var SOUND_WHITE_NOISE = 20;
+
+// Purpose:
+// Home Speaker that can play one of several predefined sounds.
+var g_sounds = [{soundID: 'sound1', soundPath: '/../Sounds/buzzLow.wav'},
+                {soundID: 'sound2', soundPath: '/../Sounds/buzzMedium.wav'},
+                {soundID: 'sound3', soundPath: '/../Sounds/buzzHigh.wav'}];
+                
+var g_currSound = -1;                
+
+// Purpose:
+// Setup the Home Speaker.  Stop any old sounds and add the sounds to use.
+function setup() 
+{
+	setDeviceProperty(getName(), 'SOUND_dB', 0);
+
+	IoEClient.setup({
+	type: 'Home Speaker',
+	states: [{
+		name: 'Signal',
+		type: 'number',
+		controllable: false
+	}]
+	});
+	
+	destroySounds();
+	
+	for(var ind = 0; ind < g_sounds.length; ++ind)
+		addSound(g_sounds[ind].soundID, g_sounds[ind].soundPath);
+	
+	restoreProperty("SOUND_dB", 0);
+	g_currSound = restoreProperty("Signal", -1);
+}
+
+function restoreProperty(propertyName, defaultValue)
+{
+	var value = getDeviceProperty(getName(), propertyName);
+	if ( !(value === "" || value == "undefined") ){
+		if ( typeof(defaultValue) == "number" )
+			value = Number(value);
+		
+		setDeviceProperty(getName(), propertyName, value);
+		return value;
+	}
+	
+	return defaultValue;
+}
+
+
+// Purpose:
+// Update function.  Is called once each update.
+function loop() 
+{
+	updateState();
+	delay(1000);	
+}
+
+// Purpose:
+// Update the sound state, reading from the slot and playing the approperiate sound.
+function updateState()
+{
+	var playValue = 255*(analogRead(A0)/1023);
+	if(0 > playValue)
+		playValue = 0;
+	else if(playValue > 255)
+		playValue = 255;
+	
+	setDeviceProperty(getName(), 'SOUND_dB', playValue * (60/255));
+
+	if(-1 != g_currSound)
+		stopSound(g_sounds[g_currSound].soundID);
+	
+	if(0 === playValue)
+		g_currSound = -1;
+	else
+		g_currSound = Math.floor((playValue-1) / (255/g_sounds.length));	
+	
+	if(-1 !== g_currSound)	
+		playSound(g_sounds[g_currSound].soundID, 1);
+		
+	IoEClient.reportStates(g_currSound);
+	setDeviceProperty(getName(), "Signal", g_currSound);
+	updateEnvironment();
+}
+
+function updateEnvironment()
+{
+	var volumeRatio = VOLUME_AT_RATE / Environment.getVolume();
+	if (g_currSound >= 0)
+	{
+		Environment.setContribution("Sound Volume", SOUND_VOLUME*volumeRatio, SOUND_VOLUME*volumeRatio, false);
+		Environment.setContribution("Sound Pitch", SOUND_PITCH*(g_currSound+1), SOUND_PITCH*(g_currSound+1), false);
+		Environment.setContribution("White Noise", SOUND_WHITE_NOISE, SOUND_WHITE_NOISE, false);
+	}
+	else
+	{
+		Environment.setContribution("Sound Volume", 0);
+		Environment.setContribution("Sound Pitch", 0);
+		Environment.setContribution("White Noise", 0);
+	}
+
+}
+
+
+FAN
+var FAN_SPEED_LOW = 0.4; // kph
+var FAN_SPEED_HIGH = 0.8; // kph
+var COOLING_RATE = -1/3600; // -1C/hour
+var HUMDITY_REDUCTION_RATE = -1/3600; // -1%/hour
+
+var VOLUME_AT_RATE = 100000;	// the given rates are based on this volume
+
+var state = 0;	// 0 off, 1 low, 2 high
+var level = 0;
+
+function setup() {
+	
+	IoEClient.setup({
+		type: "Ceiling Fan",
+		states: [
+		{
+			name: "Status",
+			type: "options",
+			options: {
+				"0": "Off",
+				"1": "Low",
+				"2": "High"
+			},
+			controllable: true
+		}			
+		]
+	});
+	
+	IoEClient.onInputReceive = function(input) {
+		processData(input, true);
+	};
+	
+	attachInterrupt(0, function() {
+		processData(customRead(0), false);
+	});
+	
+	state = restoreProperty("state", 0);
+	setState(state);
+}
+
+function restoreProperty(propertyName, defaultValue)
+{
+	var value = getDeviceProperty(getName(), propertyName);
+	if ( !(value === "" || value == "undefined") ){
+		if ( typeof(defaultValue) == "number" )
+			value = Number(value);
+		
+		setDeviceProperty(getName(), propertyName, value);
+		return value;
+	}
+	
+	return defaultValue;
+}
+
+function mouseEvent(pressed, x, y, firstPress) {
+	if (firstPress)
+		toggleState();
+}
+
+function processData(data, bIsRemote)
+{
+	if ( data.length <= 0  )
+		return;
+	data = data.split(",");
+	setState(parseInt(data[0]));
+}
+
+function sendReport()
+{
+	var report = state;	// comma seperated states
+	customWrite(0, report);
+	IoEClient.reportStates(report);
+	setDeviceProperty(getName(), "state", state);
+}
+
+function setState(newState)
+{
+	analogWrite(A1, newState);
+	state = newState;
+	
+	sendReport();
+	updateEnvironment();
+}
+
+function toggleState()
+{
+	++state;
+	if ( state >= 3 )
+		state = 0;
+	
+	setState(state);
+
+
+}
+
+function updateEnvironment()
+{
+	var volumeRatio = VOLUME_AT_RATE / Environment.getVolume();
+
+	if ( state === 0){
+		Environment.setContribution("Wind Speed", 0, 0);
+		Environment.setContribution("Ambient Temperature", 0, 0);
+		Environment.setContribution("Humidity", 0,0); 
+	}
+	else if ( state == 1 )
+	{
+		Environment.setContribution("Wind Speed", FAN_SPEED_LOW, FAN_SPEED_LOW, false);
+		
+		// everytime the fan restarts, it can do another -100C
+		Environment.setContribution("Ambient Temperature", COOLING_RATE/2*volumeRatio, 
+			Environment.getCumulativeContribution("Ambient Temperature")-100);
+
+		Environment.setContribution("Humidity", HUMDITY_REDUCTION_RATE/2*volumeRatio, 
+			Environment.getCumulativeContribution("Humidity")-100);
+			
+	}
+	else if ( state == 2)
+	{
+		Environment.setContribution("Wind Speed", FAN_SPEED_HIGH, FAN_SPEED_HIGH, false);
+		
+		Environment.setContribution("Ambient Temperature", COOLING_RATE/2*volumeRatio, 
+			Environment.getCumulativeContribution("Ambient Temperature")-100);
+			
+		Environment.setContribution("Humidity", HUMDITY_REDUCTION_RATE*volumeRatio, 
+			Environment.getCumulativeContribution("Humidity")-100);
+	}
+		
+		
+		
+}
+
+HUMITURE MONITOR
+// Purpose:
+// Humiture detector.  Check environmental values to determine and display the humiture.
+
+// Environment must have these two variables in order for this object to work.
+// The tempurature must be in degrees fahrenheit.
+var TEMPERATURE_NAME = "Ambient Temperature";
+var HUMIDITY_NAME = 'Humidity';
+
+// How temperatures are represented in the Environment.
+// If you are storing temperature as C then this would be true.
+// If as F then false.  This way the script knows how to convert it when reading from the environment.
+var METRIC = true;
+
+// Top left position and the clip area size for the text.
+var textPos = {x: 30, y: 20};
+var textAreaSize = {w: 230, h: 52 };
+
+function setup() 
+{
+	// Necessary for display in a registration server.
+	IoEClient.setup({
+		type: "Humitor Sensor",
+		states: [
+		{
+			name: "Humitor",
+			type: "number",
+
+			controllable: false
+		}]
+	});	
+}
+
+// Purpose:
+// Update function.  Occures once each update.  Limits how over the temerature is detected to speed up the operation.
+function loop() 
+{
+	detect();
+	delay(1000);
+}
+
+// Detects when how temperature is stored in then environment is changed.
+// Updates the display and handles the correct measurement type (F or C)
+function measurementSystemChangeEvent() 
+{
+	var unit = "C";
+	METRIC = isUsingMetric();
+	unit = METRIC ? "C" : "F";
+	detect();
+}
+
+// Purpose:
+// Check the environmental value and calculate and display the humiture.
+function detect()
+{
+	var temperature = Environment.get(TEMPERATURE_NAME);
+	var humidity = Environment.get(HUMIDITY_NAME);
+	if(0 > humidity)
+		humidity = 0;
+		
+	if(METRIC)
+		temperature = (temperature * 1.8) + 32;	
+	
+	updateHumiture(temperature,  humidity);
+}
+
+
+// Purpose:
+// Compute the humature and update the text display.
+function updateHumiture(temperature, humidity)
+{
+	var result = (temperature + humidity)/2;
+	var text = Math.floor(result + .5);
+	setCustomText(textPos.x, textPos.y, textAreaSize.w, textAreaSize.h, text);
+
+	// Update a registration server.
+	IoEClient.reportStates(text);
+	setDeviceProperty(getName(), "level", text);
+	
+}
+
+
