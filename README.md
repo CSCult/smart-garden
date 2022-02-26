@@ -1,4 +1,4 @@
-# smart-plantation-system
+# smart-garden
 
 Design a Smart Plantation System using Cisco Packet Tracer. <br><br>
 Objective: To design a smart plantation system using IoT devices and tools on cisco packet tracer. <br>
