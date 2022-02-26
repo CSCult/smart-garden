@@ -1,9 +1,10 @@
-# smart-plantation 
+# IoT-based-Smart-Farm
 
-Design smart plantation system using cisco packet tracer
+Design a Smart Plantation System using Cisco Packet Tracer. <br><br>
+Objective: To design a smart plantation system using IoT devices and tools on cisco packet tracer. <br>
+IoT Smart Farming Solutions is a system that is built for monitoring the crop field with the help of sensors such as light, humidity, temperature, soil moisture, crop health, etc and automating the irrigation system.
 
-objective
-to design a smart plantation syatem using iot devices and tools on cisco packet tracer. IoT smart farming solutions is a system that is built for monitoring the crop field with the help of sensors (light, humidity, temperature, soil moisture, crop health, etc.) and automating the irrigation system.
-
-tasks
-
+Tasks:
+1. Use minimum number of sensors.
+2. Reduce the power consumption.
+3. Reduce the gadget expenses and space usage.
